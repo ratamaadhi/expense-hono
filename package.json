@@ -12,8 +12,10 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@hono/node-server": "^2.0.1",
     "@hono/zod-openapi": "^0.16.0",
     "@scalar/hono-api-reference": "^0.5.0",
+    "dotenv": "^17.4.2",
     "drizzle-orm": "^0.36.0",
     "hono": "^4.6.0",
     "postgres": "^3.4.5",

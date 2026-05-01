@@ -14,33 +14,7 @@ import {
 const app = new OpenAPIHono()
 
 // List all categories
-app.get('/', {
-  tags: ['categories'],
-  summary: 'List all categories',
-  responses: {
-    200: {
-      content: {
-        'application/json': {
-          schema: z.array(z.object({
-            id: z.string().uuid(),
-            name: z.string(),
-            color: z.string().nullable(),
-            createdAt: z.date(),
-          })),
-        },
-      },
-      description: 'List of categories',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
+app.get('/', async (c) => {
   try {
     const allCategories = await db.select().from(categories).orderBy(categories.createdAt)
     return c.json(allCategories)
@@ -55,61 +29,11 @@ app.get('/', {
 })
 
 // Create category
-app.post('/', {
-  tags: ['categories'],
-  summary: 'Create a new category',
-  request: {
-    body: {
-      content: {
-        'application/json': {
-          schema: createCategorySchema,
-        },
-      },
-    },
-  },
-  responses: {
-    201: {
-      content: {
-        'application/json': {
-          schema: z.object({
-            id: z.string().uuid(),
-            name: z.string(),
-            color: z.string().nullable(),
-            createdAt: z.date(),
-          }),
-        },
-      },
-      description: 'Category created',
-    },
-    400: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Validation error',
-    },
-    409: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Category name already exists',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
+app.post('/', async (c) => {
   try {
-    const body = c.req.valid('json')
-    const [newCategory] = await db.insert(categories).values(body).returning()
+    const body = await c.req.json()
+    const validated = createCategorySchema.parse(body)
+    const [newCategory] = await db.insert(categories).values(validated).returning()
     return c.json(newCategory, 201)
   } catch (error: any) {
     if (error.code === '23505') { // Unique constraint violation
@@ -119,6 +43,18 @@ app.post('/', {
           message: 'Category name already exists',
         },
       }, 409)
+    }
+    if (error.name === 'ZodError') {
+      return c.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Validation failed',
+          details: error.errors.map((e: any) => ({
+            field: e.path.join('.'),
+            message: e.message,
+          })),
+        },
+      }, 400)
     }
     return c.json({
       error: {
@@ -130,47 +66,11 @@ app.post('/', {
 })
 
 // Get single category
-app.get('/:id', {
-  tags: ['categories'],
-  summary: 'Get a category by ID',
-  request: {
-    params: categoryParamsSchema,
-  },
-  responses: {
-    200: {
-      content: {
-        'application/json': {
-          schema: z.object({
-            id: z.string().uuid(),
-            name: z.string(),
-            color: z.string().nullable(),
-            createdAt: z.date(),
-          }),
-        },
-      },
-      description: 'Category found',
-    },
-    404: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Category not found',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
-  const { id } = c.req.valid('param')
+app.get('/:id', async (c) => {
+  const { id } = c.req.param()
   try {
-    const [category] = await db.select().from(categories).where(eq(categories.id, id))
+    const validated = categoryParamsSchema.parse({ id })
+    const [category] = await db.select().from(categories).where(eq(categories.id, validated.id))
     if (!category) {
       return c.json({
         error: {
@@ -180,7 +80,15 @@ app.get('/:id', {
       }, 404)
     }
     return c.json(category)
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return c.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid ID format',
+        },
+      }, 400)
+    }
     return c.json({
       error: {
         code: 'SERVER_ERROR',
@@ -191,55 +99,13 @@ app.get('/:id', {
 })
 
 // Update category
-app.put('/:id', {
-  tags: ['categories'],
-  summary: 'Update a category',
-  request: {
-    params: categoryParamsSchema,
-    body: {
-      content: {
-        'application/json': {
-          schema: updateCategorySchema,
-        },
-      },
-    },
-  },
-  responses: {
-    200: {
-      content: {
-        'application/json': {
-          schema: z.object({
-            id: z.string().uuid(),
-            name: z.string(),
-            color: z.string().nullable(),
-            createdAt: z.date(),
-          }),
-        },
-      },
-      description: 'Category updated',
-    },
-    404: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Category not found',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
-  const { id } = c.req.valid('param')
-  const body = c.req.valid('json')
+app.put('/:id', async (c) => {
+  const { id } = c.req.param()
   try {
-    const [updated] = await db.update(categories).set(body).where(eq(categories.id, id)).returning()
+    const validatedParams = categoryParamsSchema.parse({ id })
+    const body = await c.req.json()
+    const validatedBody = updateCategorySchema.parse(body)
+    const [updated] = await db.update(categories).set(validatedBody).where(eq(categories.id, validatedParams.id)).returning()
     if (!updated) {
       return c.json({
         error: {
@@ -249,7 +115,19 @@ app.put('/:id', {
       }, 404)
     }
     return c.json(updated)
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return c.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Validation failed',
+          details: error.errors.map((e: any) => ({
+            field: e.path.join('.'),
+            message: e.message,
+          })),
+        },
+      }, 400)
+    }
     return c.json({
       error: {
         code: 'SERVER_ERROR',
@@ -260,37 +138,11 @@ app.put('/:id', {
 })
 
 // Delete category
-app.delete('/:id', {
-  tags: ['categories'],
-  summary: 'Delete a category',
-  request: {
-    params: categoryParamsSchema,
-  },
-  responses: {
-    204: {
-      description: 'Category deleted',
-    },
-    404: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Category not found',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
-  const { id } = c.req.valid('param')
+app.delete('/:id', async (c) => {
+  const { id } = c.req.param()
   try {
-    const [deleted] = await db.delete(categories).where(eq(categories.id, id)).returning()
+    const validated = categoryParamsSchema.parse({ id })
+    const [deleted] = await db.delete(categories).where(eq(categories.id, validated.id)).returning()
     if (!deleted) {
       return c.json({
         error: {
@@ -300,7 +152,15 @@ app.delete('/:id', {
       }, 404)
     }
     return c.newResponse(null, 204)
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return c.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid ID format',
+        },
+      }, 400)
+    }
     return c.json({
       error: {
         code: 'SERVER_ERROR',
