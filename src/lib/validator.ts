@@ -19,7 +19,6 @@ export const createTransactionSchema = z.object({
   amount: z.number().positive().max(999999999),
   description: z.string().min(1).max(500).optional(),
   categoryId: z.string().uuid(),
-  amount: z.number().positive().max(999999999),
   occurredAt: z.string().datetime().optional(),
 })
 
