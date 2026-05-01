@@ -6,7 +6,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@expsense-db:5432/expsense
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@expsense-db:5432/expense
     depends_on:
       - expsense-db
     networks:
@@ -18,7 +18,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=expsense
+      - POSTGRES_DB=expense
     volumes:
       - expsense-db-data:/var/lib/postgresql/data
     networks:
