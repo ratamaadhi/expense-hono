@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  expsense-api:
+    build: .
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@expsense-db:5432/expsense
+    depends_on:
+      - expsense-db
+    networks:
+      - dokploy-network
+    restart: unless-stopped
+
+  expsense-db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=expsense
+    volumes:
+      - expsense-db-data:/var/lib/postgresql/data
+    networks:
+      - dokploy-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  expsense-db-data:
