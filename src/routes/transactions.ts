@@ -1,6 +1,5 @@
 // src/routes/transactions.ts
 import { OpenAPIHono } from '@hono/zod-openapi'
-import { z } from 'zod'
 import { db } from '../db/index.js'
 import { transactions, categories } from '../db/schema.js'
 import { eq, and, gte, lte, desc } from 'drizzle-orm'
@@ -9,47 +8,14 @@ import {
   updateTransactionSchema,
   transactionParamsSchema,
   listTransactionsQuerySchema,
-  errorResponseSchema,
 } from '../lib/validator.js'
 
 const app = new OpenAPIHono()
 
 // List transactions with filters
-app.get('/', {
-  tags: ['transactions'],
-  summary: 'List transactions with optional filters',
-  request: {
-    query: listTransactionsQuerySchema,
-  },
-  responses: {
-    200: {
-      content: {
-        'application/json': {
-          schema: z.array(z.object({
-            id: z.string().uuid(),
-            type: z.enum(['income', 'expense']),
-            amount: z.string(),
-            description: z.string().nullable(),
-            categoryId: z.string().uuid().nullable(),
-            occurredAt: z.date(),
-            createdAt: z.date(),
-          })),
-        },
-      },
-      description: 'List of transactions',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
-  const query = c.req.valid('query')
+app.get('/', async (c) => {
   try {
+    const query = listTransactionsQuerySchema.parse(c.req.query())
     let conditions = []
 
     if (query.type) {
@@ -84,65 +50,13 @@ app.get('/', {
 })
 
 // Create transaction
-app.post('/', {
-  tags: ['transactions'],
-  summary: 'Create a new transaction',
-  request: {
-    body: {
-      content: {
-        'application/json': {
-          schema: createTransactionSchema,
-        },
-      },
-    },
-  },
-  responses: {
-    201: {
-      content: {
-        'application/json': {
-          schema: z.object({
-            id: z.string().uuid(),
-            type: z.enum(['income', 'expense']),
-            amount: z.string(),
-            description: z.string().nullable(),
-            categoryId: z.string().uuid(),
-            occurredAt: z.date(),
-            createdAt: z.date(),
-          }),
-        },
-      },
-      description: 'Transaction created',
-    },
-    400: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Validation error',
-    },
-    404: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Category not found',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
-  const body = c.req.valid('json')
+app.post('/', async (c) => {
   try {
+    const body = await c.req.json()
+    const validated = createTransactionSchema.parse(body)
+
     // Verify category exists
-    const [category] = await db.select().from(categories).where(eq(categories.id, body.categoryId))
+    const [category] = await db.select().from(categories).where(eq(categories.id, validated.categoryId))
     if (!category) {
       return c.json({
         error: {
@@ -153,14 +67,26 @@ app.post('/', {
     }
 
     const values = {
-      ...body,
-      amount: body.amount.toString(),
-      occurredAt: body.occurredAt ? new Date(body.occurredAt) : new Date(),
+      ...validated,
+      amount: validated.amount.toString(),
+      occurredAt: validated.occurredAt ? new Date(validated.occurredAt) : new Date(),
     }
 
     const [newTransaction] = await db.insert(transactions).values(values).returning()
     return c.json(newTransaction, 201)
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return c.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Validation failed',
+          details: error.errors.map((e: any) => ({
+            field: e.path.join('.'),
+            message: e.message,
+          })),
+        },
+      }, 400)
+    }
     return c.json({
       error: {
         code: 'SERVER_ERROR',
@@ -171,50 +97,11 @@ app.post('/', {
 })
 
 // Get single transaction
-app.get('/:id', {
-  tags: ['transactions'],
-  summary: 'Get a transaction by ID',
-  request: {
-    params: transactionParamsSchema,
-  },
-  responses: {
-    200: {
-      content: {
-        'application/json': {
-          schema: z.object({
-            id: z.string().uuid(),
-            type: z.enum(['income', 'expense']),
-            amount: z.string(),
-            description: z.string().nullable(),
-            categoryId: z.string().uuid().nullable(),
-            occurredAt: z.date(),
-            createdAt: z.date(),
-          }),
-        },
-      },
-      description: 'Transaction found',
-    },
-    404: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Transaction not found',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
-  const { id } = c.req.valid('param')
+app.get('/:id', async (c) => {
+  const { id } = c.req.param()
   try {
-    const [transaction] = await db.select().from(transactions).where(eq(transactions.id, id))
+    const validated = transactionParamsSchema.parse({ id })
+    const [transaction] = await db.select().from(transactions).where(eq(transactions.id, validated.id))
     if (!transaction) {
       return c.json({
         error: {
@@ -224,7 +111,15 @@ app.get('/:id', {
       }, 404)
     }
     return c.json(transaction)
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return c.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid ID format',
+        },
+      }, 400)
+    }
     return c.json({
       error: {
         code: 'SERVER_ERROR',
@@ -235,66 +130,22 @@ app.get('/:id', {
 })
 
 // Update transaction
-app.put('/:id', {
-  tags: ['transactions'],
-  summary: 'Update a transaction',
-  request: {
-    params: transactionParamsSchema,
-    body: {
-      content: {
-        'application/json': {
-          schema: updateTransactionSchema,
-        },
-      },
-    },
-  },
-  responses: {
-    200: {
-      content: {
-        'application/json': {
-          schema: z.object({
-            id: z.string().uuid(),
-            type: z.enum(['income', 'expense']),
-            amount: z.string(),
-            description: z.string().nullable(),
-            categoryId: z.string().uuid().nullable(),
-            occurredAt: z.date(),
-            createdAt: z.date(),
-          }),
-        },
-      },
-      description: 'Transaction updated',
-    },
-    404: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Transaction not found',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
-  const { id } = c.req.valid('param')
-  const body = c.req.valid('json')
+app.put('/:id', async (c) => {
+  const { id } = c.req.param()
   try {
-    const values: any = { ...body }
-    if (body.amount !== undefined) {
-      values.amount = body.amount.toString()
+    const validatedParams = transactionParamsSchema.parse({ id })
+    const body = await c.req.json()
+    const validatedBody = updateTransactionSchema.parse(body)
+
+    const values: any = { ...validatedBody }
+    if (validatedBody.amount !== undefined) {
+      values.amount = validatedBody.amount.toString()
     }
-    if (body.occurredAt !== undefined) {
-      values.occurredAt = new Date(body.occurredAt)
+    if (validatedBody.occurredAt !== undefined) {
+      values.occurredAt = new Date(validatedBody.occurredAt)
     }
 
-    const [updated] = await db.update(transactions).set(values).where(eq(transactions.id, id)).returning()
+    const [updated] = await db.update(transactions).set(values).where(eq(transactions.id, validatedParams.id)).returning()
     if (!updated) {
       return c.json({
         error: {
@@ -304,7 +155,19 @@ app.put('/:id', {
       }, 404)
     }
     return c.json(updated)
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return c.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Validation failed',
+          details: error.errors.map((e: any) => ({
+            field: e.path.join('.'),
+            message: e.message,
+          })),
+        },
+      }, 400)
+    }
     return c.json({
       error: {
         code: 'SERVER_ERROR',
@@ -315,37 +178,11 @@ app.put('/:id', {
 })
 
 // Delete transaction
-app.delete('/:id', {
-  tags: ['transactions'],
-  summary: 'Delete a transaction',
-  request: {
-    params: transactionParamsSchema,
-  },
-  responses: {
-    204: {
-      description: 'Transaction deleted',
-    },
-    404: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Transaction not found',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
-  const { id } = c.req.valid('param')
+app.delete('/:id', async (c) => {
+  const { id } = c.req.param()
   try {
-    const [deleted] = await db.delete(transactions).where(eq(transactions.id, id)).returning()
+    const validated = transactionParamsSchema.parse({ id })
+    const [deleted] = await db.delete(transactions).where(eq(transactions.id, validated.id)).returning()
     if (!deleted) {
       return c.json({
         error: {
@@ -355,7 +192,15 @@ app.delete('/:id', {
       }, 404)
     }
     return c.newResponse(null, 204)
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return c.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid ID format',
+        },
+      }, 400)
+    }
     return c.json({
       error: {
         code: 'SERVER_ERROR',

@@ -28,9 +28,9 @@ app.doc('/openapi.json', {
 
 // Scalar UI
 app.get('/docs', apiReference({
-  url: '/openapi.json',
-  theme: 'default',
-  layout: 'classic',
+  spec: {
+    url: '/openapi.json',
+  },
 }))
 
 // Health check

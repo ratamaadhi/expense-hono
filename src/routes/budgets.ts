@@ -1,14 +1,12 @@
 // src/routes/budgets.ts
 import { OpenAPIHono } from '@hono/zod-openapi'
-import { z } from 'zod'
 import { db } from '../db/index.js'
 import { budgets, categories, transactions } from '../db/schema.js'
-import { eq, and, gte, sql } from 'drizzle-orm'
+import { eq, and, gte, sql, isNull } from 'drizzle-orm'
 import {
   createBudgetSchema,
   updateBudgetSchema,
   budgetParamsSchema,
-  errorResponseSchema,
 } from '../lib/validator.js'
 
 const app = new OpenAPIHono()
@@ -40,7 +38,7 @@ async function getBudgetUtilization(budgetId: string) {
     .from(transactions)
     .where(
       and(
-        eq(transactions.categoryId, budget.categoryId),
+        budget.categoryId ? eq(transactions.categoryId, budget.categoryId) : isNull(transactions.categoryId),
         eq(transactions.type, 'expense'),
         gte(transactions.occurredAt, periodStart)
       )
@@ -59,37 +57,7 @@ async function getBudgetUtilization(budgetId: string) {
 }
 
 // List all budgets with utilization
-app.get('/', {
-  tags: ['budgets'],
-  summary: 'List all budgets with utilization',
-  responses: {
-    200: {
-      content: {
-        'application/json': {
-          schema: z.array(z.object({
-            id: z.string().uuid(),
-            categoryId: z.string().uuid(),
-            amount: z.string(),
-            period: z.enum(['monthly', 'yearly']),
-            createdAt: z.date(),
-            spent: z.string(),
-            remaining: z.string(),
-            utilizationPercentage: z.number(),
-          })),
-        },
-      },
-      description: 'List of budgets with utilization',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
+app.get('/', async (c) => {
   try {
     const allBudgets = await db.select().from(budgets)
     const budgetsWithUtilization = await Promise.all(
@@ -107,74 +75,13 @@ app.get('/', {
 })
 
 // Create budget
-app.post('/', {
-  tags: ['budgets'],
-  summary: 'Create a new budget',
-  request: {
-    body: {
-      content: {
-        'application/json': {
-          schema: createBudgetSchema,
-        },
-      },
-    },
-  },
-  responses: {
-    201: {
-      content: {
-        'application/json': {
-          schema: z.object({
-            id: z.string().uuid(),
-            categoryId: z.string().uuid(),
-            amount: z.string(),
-            period: z.enum(['monthly', 'yearly']),
-            createdAt: z.date(),
-            spent: z.string(),
-            remaining: z.string(),
-            utilizationPercentage: z.number(),
-          }),
-        },
-      },
-      description: 'Budget created',
-    },
-    400: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Validation error',
-    },
-    404: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Category not found',
-    },
-    409: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Budget already exists for this category',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
-  const body = c.req.valid('json')
+app.post('/', async (c) => {
   try {
+    const body = await c.req.json()
+    const validated = createBudgetSchema.parse(body)
+
     // Verify category exists
-    const [category] = await db.select().from(categories).where(eq(categories.id, body.categoryId))
+    const [category] = await db.select().from(categories).where(eq(categories.id, validated.categoryId))
     if (!category) {
       return c.json({
         error: {
@@ -185,8 +92,8 @@ app.post('/', {
     }
 
     const values = {
-      ...body,
-      amount: body.amount.toString(),
+      ...validated,
+      amount: validated.amount.toString(),
     }
 
     const [newBudget] = await db.insert(budgets).values(values).returning()
@@ -201,6 +108,18 @@ app.post('/', {
         },
       }, 409)
     }
+    if (error.name === 'ZodError') {
+      return c.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Validation failed',
+          details: error.errors.map((e: any) => ({
+            field: e.path.join('.'),
+            message: e.message,
+          })),
+        },
+      }, 400)
+    }
     return c.json({
       error: {
         code: 'SERVER_ERROR',
@@ -211,51 +130,11 @@ app.post('/', {
 })
 
 // Get single budget with utilization
-app.get('/:id', {
-  tags: ['budgets'],
-  summary: 'Get a budget by ID with utilization',
-  request: {
-    params: budgetParamsSchema,
-  },
-  responses: {
-    200: {
-      content: {
-        'application/json': {
-          schema: z.object({
-            id: z.string().uuid(),
-            categoryId: z.string().uuid(),
-            amount: z.string(),
-            period: z.enum(['monthly', 'yearly']),
-            createdAt: z.date(),
-            spent: z.string(),
-            remaining: z.string(),
-            utilizationPercentage: z.number(),
-          }),
-        },
-      },
-      description: 'Budget found',
-    },
-    404: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Budget not found',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
-  const { id } = c.req.valid('param')
+app.get('/:id', async (c) => {
+  const { id } = c.req.param()
   try {
-    const budgetWithUtilization = await getBudgetUtilization(id)
+    const validated = budgetParamsSchema.parse({ id })
+    const budgetWithUtilization = await getBudgetUtilization(validated.id)
     if (!budgetWithUtilization) {
       return c.json({
         error: {
@@ -265,7 +144,15 @@ app.get('/:id', {
       }, 404)
     }
     return c.json(budgetWithUtilization)
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return c.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid ID format',
+        },
+      }, 400)
+    }
     return c.json({
       error: {
         code: 'SERVER_ERROR',
@@ -276,64 +163,19 @@ app.get('/:id', {
 })
 
 // Update budget
-app.put('/:id', {
-  tags: ['budgets'],
-  summary: 'Update a budget',
-  request: {
-    params: budgetParamsSchema,
-    body: {
-      content: {
-        'application/json': {
-          schema: updateBudgetSchema,
-        },
-      },
-    },
-  },
-  responses: {
-    200: {
-      content: {
-        'application/json': {
-          schema: z.object({
-            id: z.string().uuid(),
-            categoryId: z.string().uuid(),
-            amount: z.string(),
-            period: z.enum(['monthly', 'yearly']),
-            createdAt: z.date(),
-            spent: z.string(),
-            remaining: z.string(),
-            utilizationPercentage: z.number(),
-          }),
-        },
-      },
-      description: 'Budget updated',
-    },
-    404: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Budget not found',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
-  const { id } = c.req.valid('param')
-  const body = c.req.valid('json')
+app.put('/:id', async (c) => {
+  const { id } = c.req.param()
   try {
-    const values: any = { ...body }
-    if (body.amount !== undefined) {
-      values.amount = body.amount.toString()
+    const validatedParams = budgetParamsSchema.parse({ id })
+    const body = await c.req.json()
+    const validatedBody = updateBudgetSchema.parse(body)
+
+    const values: any = { ...validatedBody }
+    if (validatedBody.amount !== undefined) {
+      values.amount = validatedBody.amount.toString()
     }
 
-    const [updated] = await db.update(budgets).set(values).where(eq(budgets.id, id)).returning()
+    const [updated] = await db.update(budgets).set(values).where(eq(budgets.id, validatedParams.id)).returning()
     if (!updated) {
       return c.json({
         error: {
@@ -343,9 +185,21 @@ app.put('/:id', {
       }, 404)
     }
 
-    const budgetWithUtilization = await getBudgetUtilization(id)
+    const budgetWithUtilization = await getBudgetUtilization(validatedParams.id)
     return c.json(budgetWithUtilization)
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return c.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Validation failed',
+          details: error.errors.map((e: any) => ({
+            field: e.path.join('.'),
+            message: e.message,
+          })),
+        },
+      }, 400)
+    }
     return c.json({
       error: {
         code: 'SERVER_ERROR',
@@ -356,37 +210,11 @@ app.put('/:id', {
 })
 
 // Delete budget
-app.delete('/:id', {
-  tags: ['budgets'],
-  summary: 'Delete a budget',
-  request: {
-    params: budgetParamsSchema,
-  },
-  responses: {
-    204: {
-      description: 'Budget deleted',
-    },
-    404: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Budget not found',
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
-      description: 'Server error',
-    },
-  },
-}, async (c) => {
-  const { id } = c.req.valid('param')
+app.delete('/:id', async (c) => {
+  const { id } = c.req.param()
   try {
-    const [deleted] = await db.delete(budgets).where(eq(budgets.id, id)).returning()
+    const validated = budgetParamsSchema.parse({ id })
+    const [deleted] = await db.delete(budgets).where(eq(budgets.id, validated.id)).returning()
     if (!deleted) {
       return c.json({
         error: {
@@ -396,7 +224,15 @@ app.delete('/:id', {
       }, 404)
     }
     return c.newResponse(null, 204)
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return c.json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid ID format',
+        },
+      }, 400)
+    }
     return c.json({
       error: {
         code: 'SERVER_ERROR',
