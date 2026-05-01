@@ -1,5 +1,6 @@
 // src/routes/analytics.ts
 import { OpenAPIHono } from '@hono/zod-openapi'
+import { z } from 'zod'
 import { db } from '../db/index.js'
 import { transactions, categories } from '../db/schema.js'
 import { eq, sql, and } from 'drizzle-orm'
@@ -7,7 +8,29 @@ import { eq, sql, and } from 'drizzle-orm'
 const app = new OpenAPIHono()
 
 // Summary endpoint
-app.get('/summary', async (c) => {
+app.openapi({
+  method: 'get',
+  path: '/summary',
+  tags: ['analytics'],
+  summary: 'Get financial summary (total income, expenses, and balance)',
+  responses: {
+    200: {
+      description: 'Financial summary',
+      content: {
+        'application/json': {
+          schema: z.object({
+            totalIncome: z.string(),
+            totalExpense: z.string(),
+            netBalance: z.string(),
+          }),
+        },
+      },
+    },
+    500: {
+      description: 'Server error',
+    },
+  },
+}, async (c) => {
   try {
     // Total income
     const [incomeResult] = await db
@@ -45,7 +68,31 @@ app.get('/summary', async (c) => {
 })
 
 // By category breakdown
-app.get('/by-category', async (c) => {
+app.openapi({
+  method: 'get',
+  path: '/by-category',
+  tags: ['analytics'],
+  summary: 'Get financial breakdown by category',
+  responses: {
+    200: {
+      description: 'Financial breakdown by category',
+      content: {
+        'application/json': {
+          schema: z.array(z.object({
+            categoryId: z.string(),
+            categoryName: z.string(),
+            totalIncome: z.string(),
+            totalExpense: z.string(),
+            netBalance: z.string(),
+          })),
+        },
+      },
+    },
+    500: {
+      description: 'Server error',
+    },
+  },
+}, async (c) => {
   try {
     const allCategories = await db.select().from(categories)
 

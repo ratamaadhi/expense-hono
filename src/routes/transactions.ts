@@ -1,5 +1,6 @@
 // src/routes/transactions.ts
 import { OpenAPIHono } from '@hono/zod-openapi'
+import { z } from 'zod'
 import { db } from '../db/index.js'
 import { transactions, categories } from '../db/schema.js'
 import { eq, and, gte, lte, desc } from 'drizzle-orm'
@@ -13,7 +14,28 @@ import {
 const app = new OpenAPIHono()
 
 // List transactions with filters
-app.get('/', async (c) => {
+app.openapi({
+  method: 'get',
+  path: '/',
+  tags: ['transactions'],
+  summary: 'List all transactions with optional filters',
+  request: {
+    query: listTransactionsQuerySchema,
+  },
+  responses: {
+    200: {
+      description: 'List of transactions',
+      content: {
+        'application/json': {
+          schema: z.array(z.any()),
+        },
+      },
+    },
+    500: {
+      description: 'Server error',
+    },
+  },
+}, async (c) => {
   try {
     const query = listTransactionsQuerySchema.parse(c.req.query())
     let conditions = []
@@ -50,7 +72,48 @@ app.get('/', async (c) => {
 })
 
 // Create transaction
-app.post('/', async (c) => {
+app.openapi({
+  method: 'post',
+  path: '/',
+  tags: ['transactions'],
+  summary: 'Create a new transaction',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: createTransactionSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: 'Transaction created successfully',
+      content: {
+        'application/json': {
+          schema: z.object({
+            id: z.string(),
+            type: z.enum(['income', 'expense']),
+            amount: z.string(),
+            categoryId: z.string(),
+            description: z.string().optional(),
+            occurredAt: z.string().optional(),
+            createdAt: z.string(),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+    },
+    404: {
+      description: 'Category not found',
+    },
+    500: {
+      description: 'Server error',
+    },
+  },
+}, async (c) => {
   try {
     const body = await c.req.json()
     const validated = createTransactionSchema.parse(body)
@@ -97,7 +160,44 @@ app.post('/', async (c) => {
 })
 
 // Get single transaction
-app.get('/:id', async (c) => {
+app.openapi({
+  method: 'get',
+  path: '/{id}',
+  tags: ['transactions'],
+  summary: 'Get a single transaction by ID',
+  request: {
+    params: z.object({
+      id: z.string(),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Transaction details',
+      content: {
+        'application/json': {
+          schema: z.object({
+            id: z.string(),
+            type: z.enum(['income', 'expense']),
+            amount: z.string(),
+            categoryId: z.string(),
+            description: z.string().optional(),
+            occurredAt: z.string().optional(),
+            createdAt: z.string(),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid ID format',
+    },
+    404: {
+      description: 'Transaction not found',
+    },
+    500: {
+      description: 'Server error',
+    },
+  },
+}, async (c) => {
   const { id } = c.req.param()
   try {
     const validated = transactionParamsSchema.parse({ id })
@@ -130,7 +230,51 @@ app.get('/:id', async (c) => {
 })
 
 // Update transaction
-app.put('/:id', async (c) => {
+app.openapi({
+  method: 'put',
+  path: '/{id}',
+  tags: ['transactions'],
+  summary: 'Update a transaction by ID',
+  request: {
+    params: z.object({
+      id: z.string(),
+    }),
+    body: {
+      content: {
+        'application/json': {
+          schema: updateTransactionSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Transaction updated successfully',
+      content: {
+        'application/json': {
+          schema: z.object({
+            id: z.string(),
+            type: z.enum(['income', 'expense']),
+            amount: z.string(),
+            categoryId: z.string(),
+            description: z.string().optional(),
+            occurredAt: z.string().optional(),
+            createdAt: z.string(),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+    },
+    404: {
+      description: 'Transaction not found',
+    },
+    500: {
+      description: 'Server error',
+    },
+  },
+}, async (c) => {
   const { id } = c.req.param()
   try {
     const validatedParams = transactionParamsSchema.parse({ id })
@@ -178,7 +322,31 @@ app.put('/:id', async (c) => {
 })
 
 // Delete transaction
-app.delete('/:id', async (c) => {
+app.openapi({
+  method: 'delete',
+  path: '/{id}',
+  tags: ['transactions'],
+  summary: 'Delete a transaction by ID',
+  request: {
+    params: z.object({
+      id: z.string(),
+    }),
+  },
+  responses: {
+    204: {
+      description: 'Transaction deleted successfully',
+    },
+    400: {
+      description: 'Invalid ID format',
+    },
+    404: {
+      description: 'Transaction not found',
+    },
+    500: {
+      description: 'Server error',
+    },
+  },
+}, async (c) => {
   const { id } = c.req.param()
   try {
     const validated = transactionParamsSchema.parse({ id })

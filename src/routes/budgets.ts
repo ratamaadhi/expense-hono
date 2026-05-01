@@ -1,5 +1,6 @@
 // src/routes/budgets.ts
 import { OpenAPIHono } from '@hono/zod-openapi'
+import { z } from 'zod'
 import { db } from '../db/index.js'
 import { budgets, categories, transactions } from '../db/schema.js'
 import { eq, and, gte, sql, isNull } from 'drizzle-orm'
@@ -57,7 +58,25 @@ async function getBudgetUtilization(budgetId: string) {
 }
 
 // List all budgets with utilization
-app.get('/', async (c) => {
+app.openapi({
+  method: 'get',
+  path: '/',
+  tags: ['budgets'],
+  summary: 'List all budgets with utilization data',
+  responses: {
+    200: {
+      description: 'List of budgets with utilization',
+      content: {
+        'application/json': {
+          schema: z.array(z.any()),
+        },
+      },
+    },
+    500: {
+      description: 'Server error',
+    },
+  },
+}, async (c) => {
   try {
     const allBudgets = await db.select().from(budgets)
     const budgetsWithUtilization = await Promise.all(
@@ -75,7 +94,51 @@ app.get('/', async (c) => {
 })
 
 // Create budget
-app.post('/', async (c) => {
+app.openapi({
+  method: 'post',
+  path: '/',
+  tags: ['budgets'],
+  summary: 'Create a new budget',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: createBudgetSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: 'Budget created successfully',
+      content: {
+        'application/json': {
+          schema: z.object({
+            id: z.string(),
+            categoryId: z.string().optional(),
+            amount: z.string(),
+            period: z.enum(['monthly', 'yearly']),
+            spent: z.string(),
+            remaining: z.string(),
+            utilizationPercentage: z.number(),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+    },
+    404: {
+      description: 'Category not found',
+    },
+    409: {
+      description: 'Budget already exists for this category',
+    },
+    500: {
+      description: 'Server error',
+    },
+  },
+}, async (c) => {
   try {
     const body = await c.req.json()
     const validated = createBudgetSchema.parse(body)
@@ -130,7 +193,44 @@ app.post('/', async (c) => {
 })
 
 // Get single budget with utilization
-app.get('/:id', async (c) => {
+app.openapi({
+  method: 'get',
+  path: '/{id}',
+  tags: ['budgets'],
+  summary: 'Get a single budget with utilization data',
+  request: {
+    params: z.object({
+      id: z.string(),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Budget details with utilization',
+      content: {
+        'application/json': {
+          schema: z.object({
+            id: z.string(),
+            categoryId: z.string().optional(),
+            amount: z.string(),
+            period: z.enum(['monthly', 'yearly']),
+            spent: z.string(),
+            remaining: z.string(),
+            utilizationPercentage: z.number(),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Invalid ID format',
+    },
+    404: {
+      description: 'Budget not found',
+    },
+    500: {
+      description: 'Server error',
+    },
+  },
+}, async (c) => {
   const { id } = c.req.param()
   try {
     const validated = budgetParamsSchema.parse({ id })
@@ -163,7 +263,51 @@ app.get('/:id', async (c) => {
 })
 
 // Update budget
-app.put('/:id', async (c) => {
+app.openapi({
+  method: 'put',
+  path: '/{id}',
+  tags: ['budgets'],
+  summary: 'Update a budget by ID',
+  request: {
+    params: z.object({
+      id: z.string(),
+    }),
+    body: {
+      content: {
+        'application/json': {
+          schema: updateBudgetSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Budget updated successfully',
+      content: {
+        'application/json': {
+          schema: z.object({
+            id: z.string(),
+            categoryId: z.string().optional(),
+            amount: z.string(),
+            period: z.enum(['monthly', 'yearly']),
+            spent: z.string(),
+            remaining: z.string(),
+            utilizationPercentage: z.number(),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+    },
+    404: {
+      description: 'Budget not found',
+    },
+    500: {
+      description: 'Server error',
+    },
+  },
+}, async (c) => {
   const { id } = c.req.param()
   try {
     const validatedParams = budgetParamsSchema.parse({ id })
@@ -210,7 +354,31 @@ app.put('/:id', async (c) => {
 })
 
 // Delete budget
-app.delete('/:id', async (c) => {
+app.openapi({
+  method: 'delete',
+  path: '/{id}',
+  tags: ['budgets'],
+  summary: 'Delete a budget by ID',
+  request: {
+    params: z.object({
+      id: z.string(),
+    }),
+  },
+  responses: {
+    204: {
+      description: 'Budget deleted successfully',
+    },
+    400: {
+      description: 'Invalid ID format',
+    },
+    404: {
+      description: 'Budget not found',
+    },
+    500: {
+      description: 'Server error',
+    },
+  },
+}, async (c) => {
   const { id } = c.req.param()
   try {
     const validated = budgetParamsSchema.parse({ id })

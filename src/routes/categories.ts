@@ -14,7 +14,35 @@ import {
 const app = new OpenAPIHono()
 
 // List all categories
-app.get('/', async (c) => {
+app.openapi({
+  method: 'get',
+  path: '/',
+  tags: ['categories'],
+  summary: 'List all categories',
+  responses: {
+    200: {
+      description: 'List of categories',
+      content: {
+        'application/json': {
+          schema: z.array(z.object({
+            id: z.string().uuid(),
+            name: z.string(),
+            color: z.string().nullable(),
+            createdAt: z.date(),
+          })),
+        },
+      },
+    },
+    500: {
+      description: 'Server error',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+}, async (c) => {
   try {
     const allCategories = await db.select().from(categories).orderBy(categories.createdAt)
     return c.json(allCategories)
@@ -29,7 +57,60 @@ app.get('/', async (c) => {
 })
 
 // Create category
-app.post('/', async (c) => {
+app.openapi({
+  method: 'post',
+  path: '/',
+  tags: ['categories'],
+  summary: 'Create a new category',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: createCategorySchema,
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: 'Category created',
+      content: {
+        'application/json': {
+          schema: z.object({
+            id: z.string().uuid(),
+            name: z.string(),
+            color: z.string().nullable(),
+            createdAt: z.date(),
+          }),
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    409: {
+      description: 'Category name already exists',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    500: {
+      description: 'Server error',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+}, async (c) => {
   try {
     const body = await c.req.json()
     const validated = createCategorySchema.parse(body)
@@ -66,7 +147,48 @@ app.post('/', async (c) => {
 })
 
 // Get single category
-app.get('/:id', async (c) => {
+app.openapi({
+  method: 'get',
+  path: '/{id}',
+  tags: ['categories'],
+  summary: 'Get a category by ID',
+  request: {
+    params: z.object({
+      id: z.string().uuid(),
+    }),
+  },
+  responses: {
+    200: {
+      description: 'Category found',
+      content: {
+        'application/json': {
+          schema: z.object({
+            id: z.string().uuid(),
+            name: z.string(),
+            color: z.string().nullable(),
+            createdAt: z.date(),
+          }),
+        },
+      },
+    },
+    404: {
+      description: 'Category not found',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    500: {
+      description: 'Server error',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+}, async (c) => {
   const { id } = c.req.param()
   try {
     const validated = categoryParamsSchema.parse({ id })
@@ -99,7 +221,55 @@ app.get('/:id', async (c) => {
 })
 
 // Update category
-app.put('/:id', async (c) => {
+app.openapi({
+  method: 'put',
+  path: '/{id}',
+  tags: ['categories'],
+  summary: 'Update a category',
+  request: {
+    params: z.object({
+      id: z.string().uuid(),
+    }),
+    body: {
+      content: {
+        'application/json': {
+          schema: updateCategorySchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Category updated',
+      content: {
+        'application/json': {
+          schema: z.object({
+            id: z.string().uuid(),
+            name: z.string(),
+            color: z.string().nullable(),
+            createdAt: z.date(),
+          }),
+        },
+      },
+    },
+    404: {
+      description: 'Category not found',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    500: {
+      description: 'Server error',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+}, async (c) => {
   const { id } = c.req.param()
   try {
     const validatedParams = categoryParamsSchema.parse({ id })
@@ -138,7 +308,38 @@ app.put('/:id', async (c) => {
 })
 
 // Delete category
-app.delete('/:id', async (c) => {
+app.openapi({
+  method: 'delete',
+  path: '/{id}',
+  tags: ['categories'],
+  summary: 'Delete a category',
+  request: {
+    params: z.object({
+      id: z.string().uuid(),
+    }),
+  },
+  responses: {
+    204: {
+      description: 'Category deleted',
+    },
+    404: {
+      description: 'Category not found',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+    500: {
+      description: 'Server error',
+      content: {
+        'application/json': {
+          schema: errorResponseSchema,
+        },
+      },
+    },
+  },
+}, async (c) => {
   const { id } = c.req.param()
   try {
     const validated = categoryParamsSchema.parse({ id })
