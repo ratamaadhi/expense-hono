@@ -231,7 +231,7 @@ app.openapi({
     },
   },
 }, async (c) => {
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   try {
     const validated = budgetParamsSchema.parse({ id })
     const budgetWithUtilization = await getBudgetUtilization(validated.id)
@@ -308,7 +308,7 @@ app.openapi({
     },
   },
 }, async (c) => {
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   try {
     const validatedParams = budgetParamsSchema.parse({ id })
     const body = await c.req.json()
@@ -379,7 +379,7 @@ app.openapi({
     },
   },
 }, async (c) => {
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   try {
     const validated = budgetParamsSchema.parse({ id })
     const [deleted] = await db.delete(budgets).where(eq(budgets.id, validated.id)).returning()

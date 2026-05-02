@@ -198,7 +198,7 @@ app.openapi({
     },
   },
 }, async (c) => {
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   try {
     const validated = transactionParamsSchema.parse({ id })
     const [transaction] = await db.select().from(transactions).where(eq(transactions.id, validated.id))
@@ -275,7 +275,7 @@ app.openapi({
     },
   },
 }, async (c) => {
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   try {
     const validatedParams = transactionParamsSchema.parse({ id })
     const body = await c.req.json()
@@ -347,7 +347,7 @@ app.openapi({
     },
   },
 }, async (c) => {
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   try {
     const validated = transactionParamsSchema.parse({ id })
     const [deleted] = await db.delete(transactions).where(eq(transactions.id, validated.id)).returning()

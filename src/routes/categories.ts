@@ -35,11 +35,6 @@ app.openapi({
     },
     500: {
       description: 'Server error',
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
     },
   },
 }, async (c) => {
@@ -103,11 +98,6 @@ app.openapi({
     },
     500: {
       description: 'Server error',
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
     },
   },
 }, async (c) => {
@@ -181,15 +171,10 @@ app.openapi({
     },
     500: {
       description: 'Server error',
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
     },
   },
 }, async (c) => {
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   try {
     const validated = categoryParamsSchema.parse({ id })
     const [category] = await db.select().from(categories).where(eq(categories.id, validated.id))
@@ -262,15 +247,10 @@ app.openapi({
     },
     500: {
       description: 'Server error',
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
     },
   },
 }, async (c) => {
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   try {
     const validatedParams = categoryParamsSchema.parse({ id })
     const body = await c.req.json()
@@ -332,15 +312,10 @@ app.openapi({
     },
     500: {
       description: 'Server error',
-      content: {
-        'application/json': {
-          schema: errorResponseSchema,
-        },
-      },
     },
   },
 }, async (c) => {
-  const { id } = c.req.param()
+  const id = c.req.param('id')
   try {
     const validated = categoryParamsSchema.parse({ id })
     const [deleted] = await db.delete(categories).where(eq(categories.id, validated.id)).returning()
