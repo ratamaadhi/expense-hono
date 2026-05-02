@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "start": "node dist/index.js",
     "deploy": "npx drizzle-kit push && node dist/index.js",
     "db:generate": "drizzle-kit generate",
@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "tsc-alias": "^1.8.17",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   }
