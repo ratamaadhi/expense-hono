@@ -18,12 +18,6 @@ app.doc('/openapi.json', {
     version: '1.0.0',
     description: 'Personal expense tracker API with income, expenses, categories, and budgets',
   },
-  servers: [
-    {
-      url: 'http://localhost:3000',
-      description: 'Local development',
-    },
-  ],
 })
 
 // Scalar UI
