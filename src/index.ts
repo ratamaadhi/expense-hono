@@ -9,8 +9,10 @@ import routes from './routes/index.js'
 const app = new OpenAPIHono()
 
 app.use('/*', cors({
-  origin: ['https://expense-vue.ratama.space'],
+  origin: ['https://expense-vue.ratama.space', 'https://www.expense-vue.ratama.space'],
   credentials: true,
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization']
 }))
 
 // API routes
