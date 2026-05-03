@@ -3,9 +3,15 @@ import 'dotenv/config'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { apiReference } from '@scalar/hono-api-reference'
 import { serve } from '@hono/node-server'
+import { cors } from 'hono/cors'
 import routes from './routes/index.js'
 
 const app = new OpenAPIHono()
+
+app.use('/*', cors({
+  origin: ['https://expense-vue.ratama.space'],
+  credentials: true,
+}))
 
 // API routes
 app.route('/api', routes)
